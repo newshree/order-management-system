@@ -177,7 +177,6 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public List<ProductResponse> activateProducts(List<UUID> productIds, String tenantId) {
-        UUID tenantUUID = UUID.fromString(tenantId);
         return productIds.stream()
                 .map(id -> {
                     Product product = findProduct(id); // Ensure product exists
@@ -200,7 +199,6 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public List<ProductResponse> deactivateProducts(List<UUID> productIds, String tenantId) {
-        UUID tenantUUID = UUID.fromString(tenantId);
         return productIds.stream()
                 .map(id -> {
                     Product product = findProduct(id); // Ensure product exists
