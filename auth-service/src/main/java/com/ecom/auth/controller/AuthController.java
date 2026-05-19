@@ -19,6 +19,7 @@ import com.ecom.auth.service.AuthService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
@@ -91,14 +92,16 @@ public class AuthController {
 	 * @return a response entity with a new access token and refresh token
 	 */
 	@PostMapping("/refresh")
-	@Operation(summary = "Refresh access token", description = "Generates a new access token using a valid refresh token")
+	@Operation(summary = "Refresh access token", description = "Generates a new access token using a valid refresh token", 
+	security = @SecurityRequirement(name = "bearer-jwt"))
+	
 	@ApiResponses(value = {
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Token refreshed successfully"),
 		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid or missing refresh token")
 	})
 	public ResponseEntity<ApiResponse<AuthResponse>> refresh(
 			@RequestHeader(value = "Authorization", required = false) String authHeader) {
-
+						
 		if (authHeader == null || !authHeader.startsWith("Bearer ")) {
 			return ResponseEntity.badRequest().body(
 					ApiResponse.<AuthResponse>builder()

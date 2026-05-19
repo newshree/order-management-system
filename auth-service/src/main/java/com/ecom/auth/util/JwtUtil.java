@@ -6,9 +6,16 @@ import java.util.Date;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import com.ecom.auth.enums.ErrorCode;
+import com.ecom.auth.exception.BadRequestException;
+
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SecurityException;
 
 /**
  * Utility class for JWT (JSON Web Token) operations.
@@ -34,7 +41,7 @@ public class JwtUtil {
 	 * @param email the subject (user email) to embed in the token
 	 * @return a signed JWT token with the access token expiration time
 	 */
-	public String generateToken(String email) {
+	public String generateAccessToken(String email) {
 		return Jwts.builder()
 				.setSubject(email)
 				.setIssuedAt(new Date())
@@ -65,12 +72,44 @@ public class JwtUtil {
 	 * @return the email address from the token's subject claim
 	 */
 	public String extractEmail(String token) {
-		return Jwts.parserBuilder()
-				.setSigningKey(getSigningKey())
-				.build()
-				.parseClaimsJws(token)
-				.getBody()
-				.getSubject();
+
+		try {
+
+			return Jwts.parserBuilder()
+					.setSigningKey(getSigningKey())
+					.build()
+					.parseClaimsJws(token)
+					.getBody()
+					.getSubject();
+
+		} catch (ExpiredJwtException ex) {
+
+			throw new BadRequestException(
+					ErrorCode.TOKEN_EXPIRED,
+					"JWT token has expired"
+			);
+
+		} catch (MalformedJwtException ex) {
+
+			throw new BadRequestException(
+					ErrorCode.TOKEN_INVALID,
+					"Malformed JWT token"
+			);
+
+		} catch (SecurityException ex) {
+
+			throw new BadRequestException(
+					ErrorCode.INVALID_TOKEN_SIGNATURE,
+					"Invalid JWT signature"
+			);
+
+		} catch (JwtException ex) {
+
+			throw new BadRequestException(
+					ErrorCode.TOKEN_INVALID,
+					"Unable to extract email from token"
+			);
+		}
 	}
 
 	/**
@@ -81,13 +120,41 @@ public class JwtUtil {
 	 */
 	public boolean validateToken(String token) {
 		try {
+
 			Jwts.parserBuilder()
 					.setSigningKey(getSigningKey())
 					.build()
 					.parseClaimsJws(token);
+
 			return true;
-		} catch (Exception ex) {
-			return false;
+
+		} catch (ExpiredJwtException ex) {
+
+			throw new BadRequestException(
+					ErrorCode.TOKEN_EXPIRED,
+					"JWT token has expired"
+			);
+
+		} catch (MalformedJwtException ex) {
+
+			throw new BadRequestException(
+					ErrorCode.TOKEN_INVALID,
+					"Malformed JWT token"
+			);
+
+		} catch (SecurityException ex) {
+
+			throw new BadRequestException(
+					ErrorCode.TOKEN_INVALID,
+					"Invalid JWT signature"
+			);
+
+		} catch (JwtException ex) {
+
+			throw new BadRequestException(
+					ErrorCode.TOKEN_INVALID,
+					"Invalid JWT token"
+			);
 		}
 	}
 

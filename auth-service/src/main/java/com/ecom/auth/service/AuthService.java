@@ -89,7 +89,7 @@ public class AuthService {
 			);
 		}
 
-		String accessToken = jwtUtil.generateToken(user.getEmail());
+		String accessToken = jwtUtil.generateAccessToken(user.getEmail());
 		String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
 
 		return authMapper.toAuthResponse(user, accessToken, refreshToken);
@@ -104,12 +104,8 @@ public class AuthService {
 	 * @throws ResourceNotFoundException if the user associated with the token is not found
 	 */
 	public AuthResponse refreshToken(String refreshToken) {
-		if (!jwtUtil.validateToken(refreshToken)) {
-			throw new BadRequestException(
-					ErrorCode.TOKEN_INVALID,
-					"Invalid refresh token"
-			);
-		}
+
+		jwtUtil.validateToken(refreshToken);
 
 		String email = jwtUtil.extractEmail(refreshToken);
 		User user = userRepository.findByEmail(email)
@@ -118,7 +114,7 @@ public class AuthService {
 						"User not found"
 				));
 
-		String accessToken = jwtUtil.generateToken(user.getEmail());
+		String accessToken = jwtUtil.generateAccessToken(user.getEmail());
 
 		return authMapper.toAuthResponse(user, accessToken, refreshToken);
 	}
@@ -131,15 +127,5 @@ public class AuthService {
 	 */
 	public boolean validateToken(String token) {
 		return jwtUtil.validateToken(token);
-	}
-
-	/**
-	 * Extracts the email address from a JWT token.
-	 *
-	 * @param token the JWT token from which to extract the email
-	 * @return the email address encoded in the token's subject claim
-	 */
-	public String extractEmailFromToken(String token) {
-		return jwtUtil.extractEmail(token);
 	}
 }

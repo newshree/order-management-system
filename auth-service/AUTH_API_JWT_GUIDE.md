@@ -368,7 +368,7 @@ Check if account is active
     └─ isActive == true → Continue
     ↓
 Generate JWT Access Token (expires in 15 minutes)
-    └─ JwtUtil.generateToken(email)
+    └─ JwtUtil.generateAccessToken(email)
     └─ Token subject: "user@example.com"
     └─ Signed with secret key using HS256
     └─ Example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
