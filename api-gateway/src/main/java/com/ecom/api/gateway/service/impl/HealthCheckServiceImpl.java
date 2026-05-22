@@ -59,13 +59,13 @@ public class HealthCheckServiceImpl implements HealthCheckService {
 	 */
 	private String getHealthUrl(String serviceName) {
 		return switch (serviceName) {
-		case "user-service" -> GatewayConstants.USER_SERVICE_URL + "/api/health";
-		case "cart-service" -> GatewayConstants.CART_SERVICE_URL + "/api/health";
-		case "product-service" -> GatewayConstants.PRODUCT_SERVICE_URL + "/api/health";
-		case "inventory-service" -> GatewayConstants.INVENTORY_SERVICE_URL + "/api/health";
-		case "order-service" -> GatewayConstants.ORDER_SERVICE_URL + "/api/health";
-		case "payment-service" -> GatewayConstants.PAYMENT_SERVICE_URL + "/api/health";
-		case "auth-service" -> GatewayConstants.AUTH_SERVICE_URL + "/api/health";
+		case "user-service" -> GatewayConstants.USER_SERVICE_URL + "/actuator/health";
+		case "cart-service" -> GatewayConstants.CART_SERVICE_URL + "/actuator/health";
+		case "product-service" -> GatewayConstants.PRODUCT_SERVICE_URL + "/actuator/health";
+		case "inventory-service" -> GatewayConstants.INVENTORY_SERVICE_URL + "/actuator/health";
+		case "order-service" -> GatewayConstants.ORDER_SERVICE_URL + "/actuator/health";
+		case "payment-service" -> GatewayConstants.PAYMENT_SERVICE_URL + "/actuator/health";
+		case "auth-service" -> GatewayConstants.AUTH_SERVICE_URL + "/actuator/health";
 		default -> "";
 		};
 	}

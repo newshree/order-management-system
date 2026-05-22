@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,6 +23,7 @@ import com.ecom.cart.dto.response.CartItemResponse;
 import com.ecom.cart.dto.response.CartResponse;
 import com.ecom.cart.dto.response.CartValidationResponse;
 import com.ecom.cart.dto.response.CheckoutSummaryResponse;
+import com.ecom.cart.exception.ResourceNotFoundException;
 import com.ecom.cart.service.CartService;
 
 import jakarta.validation.Valid;
@@ -44,7 +46,7 @@ public class CartController {
     @Autowired
     private CartService cartService;
 
-    private static final String MOCK_USER_ID = "550e8400-e29b-41d4-a716-446655440000";  // TODO: Remove mock user ID
+//     private static final String MOCK_USER_ID = "550e8400-e29b-41d4-a716-446655440000";  // TODO: Remove mock user ID
     
     /**
      * Gets the complete shopping cart for the authenticated user.
@@ -54,9 +56,9 @@ public class CartController {
      * @return ResponseEntity with CartResponse containing cart details
      */
     @GetMapping("/getCart")
-    public ResponseEntity<ApiResponse<CartResponse>> getCart() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CartResponse>> getCart(
+        @RequestHeader("X-User-Id") UUID userId)
+    {
         CartResponse response = cartService.getCart(userId);
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
@@ -77,9 +79,8 @@ public class CartController {
      */
     @PostMapping("/addItem")
     public ResponseEntity<ApiResponse<CartResponse>> addItemToCart(
-            @Valid @RequestBody AddItemToCartRequest request) {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+            @Valid @RequestBody AddItemToCartRequest request,
+            @RequestHeader("X-User-Id") UUID userId) {
         CartResponse response = cartService.addItemToCart(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<CartResponse>builder()
                 .success(true)
@@ -108,9 +109,8 @@ public class CartController {
     @PutMapping("/updateItemQuantity/{itemId}")
     public ResponseEntity<ApiResponse<CartResponse>> updateItemQuantity(
             @PathVariable UUID itemId,
-            @Valid @RequestBody UpdateCartItemQuantityRequest request) {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+            @Valid @RequestBody UpdateCartItemQuantityRequest request,
+            @RequestHeader("X-User-Id") UUID userId) {
         CartResponse response = cartService.updateItemQuantity(userId, itemId, request);
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
@@ -131,9 +131,8 @@ public class CartController {
      */
     @DeleteMapping("/removeItem/{itemId}")
     public ResponseEntity<ApiResponse<CartResponse>> removeItemFromCart(
-            @PathVariable UUID itemId) {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+            @PathVariable UUID itemId,
+            @RequestHeader("X-User-Id") UUID userId) {
         CartResponse response = cartService.removeItemFromCart(userId, itemId);
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
@@ -152,9 +151,8 @@ public class CartController {
      * @throws ResourceNotFoundException if cart not found
      */
     @DeleteMapping("/clearCart")
-    public ResponseEntity<ApiResponse<CartResponse>> clearCart() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CartResponse>> clearCart(
+            @RequestHeader("X-User-Id") UUID userId) {
         CartResponse response = cartService.clearCart(userId);
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
@@ -183,9 +181,8 @@ public class CartController {
      * @throws ResourceNotFoundException if cart not found
      */
     @PostMapping("/validateCart")
-    public ResponseEntity<ApiResponse<CartValidationResponse>> validateCart() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CartValidationResponse>> validateCart(
+            @RequestHeader("X-User-Id") UUID userId) {
         CartValidationResponse response = cartService.validateCart(userId);
         return ResponseEntity.ok(ApiResponse.<CartValidationResponse>builder()
                 .success(true)
@@ -219,9 +216,8 @@ public class CartController {
      * @throws BadRequestException if cart is empty
      */
     @GetMapping("/getCheckoutSummary")
-    public ResponseEntity<ApiResponse<CheckoutSummaryResponse>> getCheckoutSummary() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CheckoutSummaryResponse>> getCheckoutSummary(
+            @RequestHeader("X-User-Id") UUID userId) {
         CheckoutSummaryResponse response = cartService.getCheckoutSummary(userId);
         return ResponseEntity.ok(ApiResponse.<CheckoutSummaryResponse>builder()
                 .success(true)
@@ -243,9 +239,8 @@ public class CartController {
      * @throws ResourceNotFoundException if cart not found
      */
     @PostMapping("/syncCart")
-    public ResponseEntity<ApiResponse<CartResponse>> syncCart() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CartResponse>> syncCart(
+            @RequestHeader("X-User-Id") UUID userId) {
         CartResponse response = cartService.syncCart(userId);
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
@@ -265,9 +260,8 @@ public class CartController {
      */
     @GetMapping("/getCartItems/{itemId}")
     public ResponseEntity<ApiResponse<CartItemResponse>> getCartItem(
-            @PathVariable UUID itemId) {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+            @PathVariable UUID itemId,
+            @RequestHeader("X-User-Id") UUID userId) {
         CartItemResponse response = cartService.getCartItem(userId, itemId);
         return ResponseEntity.ok(ApiResponse.<CartItemResponse>builder()
                 .success(true)

@@ -10,19 +10,6 @@ public class RouteUtils {
 	}
 
 	/**
-	 * Determines whether a request path corresponds to a public endpoint.
-	 *
-	 * @param path request URI path
-	 * @return {@code true} when the path should be accessible without auth
-	 */
-	public static boolean isPublicEndpoint(String path) {
-		return path.startsWith("/api/auth/") ||
-				path.startsWith("/api/products/public") ||
-				path.startsWith("/health") ||
-				path.startsWith("/api/gateway/health");
-	}
-
-	/**
 	 * Extracts the target service name from a request path.
 	 *
 	 * @param path request URI path

@@ -89,8 +89,8 @@ public class AuthService {
 			);
 		}
 
-		String accessToken = jwtUtil.generateAccessToken(user.getEmail());
-		String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
+		String accessToken = jwtUtil.generateAccessToken(user.getEmail(), user.getId(), user.getRole());
+		String refreshToken = jwtUtil.generateRefreshToken(user.getEmail(), user.getId(), user.getRole());
 
 		return authMapper.toAuthResponse(user, accessToken, refreshToken);
 	}
@@ -114,7 +114,7 @@ public class AuthService {
 						"User not found"
 				));
 
-		String accessToken = jwtUtil.generateAccessToken(user.getEmail());
+		String accessToken = jwtUtil.generateAccessToken(user.getEmail(), user.getId(), user.getRole());
 
 		return authMapper.toAuthResponse(user, accessToken, refreshToken);
 	}
