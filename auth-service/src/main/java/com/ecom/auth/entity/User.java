@@ -31,20 +31,20 @@ import lombok.NoArgsConstructor;
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)  // ✅ Fixed
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id")
     private UUID id;
 
     @Column(name = "email", unique = true, nullable = false)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)  // ✅ Explicit
+    @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
     @Column(name = "role", nullable = false)
     private String role;
 
-    @Column(name = "is_active", nullable = false)  // ✅ Explicit
+    @Column(name = "is_active", nullable = false)
     private Boolean isActive;
 
     @Column(name = "created_at", nullable = false, updatable = false)

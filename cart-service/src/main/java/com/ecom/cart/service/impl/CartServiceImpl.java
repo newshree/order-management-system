@@ -32,22 +32,25 @@ import com.ecom.cart.repository.CartRepository;
 import com.ecom.cart.repository.RedisCartRepository;
 import com.ecom.cart.service.CartService;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * CartServiceImpl - Implementation of CartService business logic.
- * 
+ *
  * Core responsibilities:
  * - Managing cart operations (add, update, remove, clear)
  * - Validating cart items and availability
  * - Calculating pricing information
  * - Synchronizing with external services (Product Service)
  * - Managing both Redis (fast) and database (persistent) storage
- * 
+ *
  * Architecture:
  * - Redis: Primary storage for active carts (TTL: 7 days)
  * - PostgreSQL: Backup/persistent storage
  * - Both are kept in sync
- * 
+ *
  */
+@Slf4j
 @Service
 public class CartServiceImpl implements CartService {
 
@@ -71,7 +74,7 @@ public class CartServiceImpl implements CartService {
 
     /**
      * Retrieves the cart for a specific user.
-     * 
+     *
      * Priority:
      * 1. Check Redis (fast cache)
      * 2. Check database (persistent storage)
@@ -79,18 +82,27 @@ public class CartServiceImpl implements CartService {
      */
     @Override
     public CartResponse getCart(UUID userId) {
-        
+        log.trace("Fetching cart for userId={}", userId);
+
         // Try to get from Redis first (fast)
         return redisCartRepository.findById(userId.toString())
-            .map(this::convertRedisCartToResponse)
+            .map(redisCart -> {
+                log.debug("Cart found in Redis for userId={}", userId);
+                return convertRedisCartToResponse(redisCart);
+            })
             .orElseGet(() -> {
+                log.debug("Cart not found in Redis for userId={}, checking database", userId);
 
                 // Get from database or create new
                 Cart cart = cartRepository.findByUserId(userId)
-                        .orElseGet(() -> createNewCart(userId));
+                        .orElseGet(() -> {
+                            log.info("Creating new cart for userId={}", userId);
+                            return createNewCart(userId);
+                        });
 
                 // Cache in Redis
                 saveToRedis(cart);
+                log.debug("Cart cached in Redis for userId={}", userId);
 
                 return cartMapper.toCartResponse(cart);
             });
@@ -98,7 +110,7 @@ public class CartServiceImpl implements CartService {
 
     /**
      * Adds an item to the user's cart.
-     * 
+     *
      * Business Logic:
      * 1. Get or create cart
      * 2. Fetch product from Product Service
@@ -112,8 +124,12 @@ public class CartServiceImpl implements CartService {
     @Override
     @Transactional
     public CartResponse addItemToCart(UUID userId, AddItemToCartRequest request) {
+        log.debug("Adding item to cart for userId={}, productId={}, quantity={}",
+            userId, request.getProductId(), request.getQuantity());
+
         // Validate input
         if (request.getQuantity() <= 0) {
+            log.warn("Invalid quantity provided for userId={}, quantity={}", userId, request.getQuantity());
             throw new BadRequestException(
                 ErrorCode.INVALID_QUANTITY,
                 "Quantity must be greater than 0"
@@ -122,7 +138,10 @@ public class CartServiceImpl implements CartService {
 
         // Get or create cart
         Cart cart = cartRepository.findByUserId(userId)
-            .orElseGet(() -> createNewCart(userId));
+            .orElseGet(() -> {
+                log.info("Cart not found for userId={}, creating new cart", userId);
+                return createNewCart(userId);
+            });
 
         // Fetch product details from Product Service
         String productServiceUrl = "http://localhost:8003/api/products/getProductById/" + request.getProductId();
@@ -130,12 +149,15 @@ public class CartServiceImpl implements CartService {
             // Note: In production, use a service client, not RestTemplate directly
             // For now, we'll just validate that the product ID is not null
             if (request.getProductId() == null) {
+                log.error("Product ID is null for userId={}", userId);
                 throw new ResourceNotFoundException(
                     ErrorCode.PRODUCT_NOT_FOUND,
                     "Product not found with id: " + request.getProductId()
                 );
             }
+            log.debug("Product validation passed for userId={}, productId={}", userId, request.getProductId());
         } catch (Exception e) {
+            log.error("Error validating product for userId={}, productId={}: {}", userId, request.getProductId(), e.getMessage());
             throw new ResourceNotFoundException(
                 ErrorCode.PRODUCT_NOT_FOUND,
                 "Product not found with id: " + request.getProductId()
@@ -152,8 +174,11 @@ public class CartServiceImpl implements CartService {
         if (existingItem.isPresent()) {
             // Item exists: increase quantity
             cartItem = existingItem.get();
+            int previousQuantity = cartItem.getQuantity();
             cartItem.setQuantity(cartItem.getQuantity() + request.getQuantity());
             cartItem.recalculateTotalPrice();
+            log.info("Item quantity increased for userId={}, cartId={}, productId={}, previousQuantity={}, newQuantity={}",
+                userId, cart.getId(), request.getProductId(), previousQuantity, cartItem.getQuantity());
         } else {
             // Item doesn't exist: add new item
             cartItem = CartItem.builder()
@@ -164,6 +189,8 @@ public class CartServiceImpl implements CartService {
                 .price(new BigDecimal("100.00"))  // Default price - would come from Product Service
                 .build();
             cartItem.recalculateTotalPrice();
+            log.info("New item added to cart for userId={}, cartId={}, productId={}, quantity={}",
+                userId, cart.getId(), request.getProductId(), request.getQuantity());
         }
 
         cartItemRepository.save(cartItem);
@@ -180,6 +207,7 @@ public class CartServiceImpl implements CartService {
         cart = cartRepository.findByUserId(userId).get();
         recalculateCartTotal(cart);
         cart = cartRepository.save(cart);
+        log.debug("Cart total recalculated for userId={}, cartId={}, newTotal={}", userId, cart.getId(), cart.getTotalAmount());
 
         // Save to Redis
         saveToRedis(cart);
@@ -189,7 +217,7 @@ public class CartServiceImpl implements CartService {
 
     /**
      * Updates the quantity of an item in the cart.
-     * 
+     *
      * Business Logic:
      * 1. Get cart
      * 2. Find and validate item exists
@@ -201,8 +229,12 @@ public class CartServiceImpl implements CartService {
     @Override
     @Transactional
     public CartResponse updateItemQuantity(UUID userId, UUID itemId, UpdateCartItemQuantityRequest request) {
+        log.debug("Updating item quantity for userId={}, itemId={}, newQuantity={}",
+            userId, itemId, request.getQuantity());
+
         // Validate input
         if (request.getQuantity() <= 0) {
+            log.warn("Invalid quantity provided for userId={}, itemId={}, quantity={}", userId, itemId, request.getQuantity());
             throw new BadRequestException(
                 ErrorCode.INVALID_QUANTITY,
                 "Quantity must be greater than 0"
@@ -211,20 +243,27 @@ public class CartServiceImpl implements CartService {
 
         // Get cart
         Cart cart = cartRepository.findByUserId(userId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_NOT_FOUND,
-                "Cart not found for user: " + userId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart not found for userId={}", userId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_NOT_FOUND,
+                    "Cart not found for user: " + userId
+                );
+            });
 
         // Find cart item
         CartItem cartItem = cartItemRepository.findById(itemId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_ITEM_NOT_FOUND,
-                "Cart item not found with id: " + itemId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart item not found for itemId={}", itemId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_ITEM_NOT_FOUND,
+                    "Cart item not found with id: " + itemId
+                );
+            });
 
         // Verify item belongs to this cart
         if (!cartItem.getCart().getId().equals(cart.getId())) {
+            log.warn("Cart item does not belong to this cart for userId={}, cartId={}, itemId={}", userId, cart.getId(), itemId);
             throw new BadRequestException(
                 ErrorCode.INVALID_PARAMETER,
                 "Cart item does not belong to this cart"
@@ -232,14 +271,18 @@ public class CartServiceImpl implements CartService {
         }
 
         // Update quantity and recalculate
+        int previousQuantity = cartItem.getQuantity();
         cartItem.setQuantity(request.getQuantity());
         cartItem.recalculateTotalPrice();
         cartItemRepository.save(cartItem);
+        log.info("Item quantity updated for userId={}, itemId={}, previousQuantity={}, newQuantity={}",
+            userId, itemId, previousQuantity, request.getQuantity());
 
         // Recalculate cart total (reload cart to avoid orphanRemoval issues)
         cart = cartRepository.findByUserId(userId).get();
         recalculateCartTotal(cart);
         cart = cartRepository.save(cart);
+        log.debug("Cart total recalculated for userId={}, cartId={}, newTotal={}", userId, cart.getId(), cart.getTotalAmount());
 
         // Save to Redis
         saveToRedis(cart);
@@ -249,7 +292,7 @@ public class CartServiceImpl implements CartService {
 
     /**
      * Removes an item from the cart.
-     * 
+     *
      * Business Logic:
      * 1. Get cart
      * 2. Find and delete item
@@ -259,22 +302,31 @@ public class CartServiceImpl implements CartService {
     @Override
     @Transactional
     public CartResponse removeItemFromCart(UUID userId, UUID itemId) {
+        log.debug("Removing item from cart for userId={}, itemId={}", userId, itemId);
+
         // Get cart
         Cart cart = cartRepository.findByUserId(userId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_NOT_FOUND,
-                "Cart not found for user: " + userId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart not found for userId={}", userId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_NOT_FOUND,
+                    "Cart not found for user: " + userId
+                );
+            });
 
         // Find and delete cart item
         CartItem cartItem = cartItemRepository.findById(itemId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_ITEM_NOT_FOUND,
-                "Cart item not found with id: " + itemId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart item not found for itemId={}", itemId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_ITEM_NOT_FOUND,
+                    "Cart item not found with id: " + itemId
+                );
+            });
 
         // Verify item belongs to this cart
         if (!cartItem.getCart().getId().equals(cart.getId())) {
+            log.warn("Cart item does not belong to this cart for userId={}, cartId={}, itemId={}", userId, cart.getId(), itemId);
             throw new BadRequestException(
                 ErrorCode.INVALID_PARAMETER,
                 "Cart item does not belong to this cart"
@@ -283,10 +335,13 @@ public class CartServiceImpl implements CartService {
 
         // Remove from cart's items collection (orphanRemoval will delete from DB)
         cart.getItems().remove(cartItem);
+        log.info("Item removed from cart for userId={}, cartId={}, itemId={}, productId={}",
+            userId, cart.getId(), itemId, cartItem.getProductId());
 
         // Recalculate cart total
         recalculateCartTotal(cart);
         cart = cartRepository.save(cart);
+        log.debug("Cart total recalculated for userId={}, cartId={}, newTotal={}", userId, cart.getId(), cart.getTotalAmount());
 
         // Save to Redis
         saveToRedis(cart);
@@ -296,7 +351,7 @@ public class CartServiceImpl implements CartService {
 
     /**
      * Clears all items from the user's cart.
-     * 
+     *
      * Business Logic:
      * 1. Get cart
      * 2. Delete all items
@@ -306,27 +361,36 @@ public class CartServiceImpl implements CartService {
     @Override
     @Transactional
     public CartResponse clearCart(UUID userId) {
+        log.debug("Clearing cart for userId={}", userId);
+
         // Get cart
         Cart cart = cartRepository.findByUserId(userId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_NOT_FOUND,
-                "Cart not found for user: " + userId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart not found for userId={}", userId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_NOT_FOUND,
+                    "Cart not found for user: " + userId
+                );
+            });
+
+        int itemCount = cart.getItems() != null ? cart.getItems().size() : 0;
 
         // Clear all items from collection (orphanRemoval will delete from DB)
         cart.getItems().clear();
         cart.setTotalAmount(BigDecimal.ZERO);
         cart = cartRepository.save(cart);
+        log.info("Cart cleared for userId={}, cartId={}, clearedItemCount={}", userId, cart.getId(), itemCount);
 
         // Update Redis
         redisCartRepository.deleteById(userId.toString());
+        log.debug("Cart removed from Redis for userId={}", userId);
 
         return cartMapper.toCartResponse(cart);
     }
 
     /**
      * Validates the cart for checkout.
-     * 
+     *
      * Validation Logic:
      * For each item:
      * 1. Check if product exists
@@ -335,17 +399,23 @@ public class CartServiceImpl implements CartService {
      */
     @Override
     public CartValidationResponse validateCart(UUID userId) {
+        log.debug("Validating cart for userId={}", userId);
+
         // Get cart
         Cart cart = cartRepository.findByUserId(userId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_NOT_FOUND,
-                "Cart not found for user: " + userId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart not found for userId={}", userId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_NOT_FOUND,
+                    "Cart not found for user: " + userId
+                );
+            });
 
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
         if (cart.getItems() == null || cart.getItems().isEmpty()) {
+            log.warn("Cart is empty for userId={}, cartId={}", userId, cart.getId());
             errors.add("Cart is empty");
             return CartValidationResponse.builder()
                 .isValid(false)
@@ -361,12 +431,14 @@ public class CartServiceImpl implements CartService {
             // Check if product exists
             // In production, call Product Service
             if (item.getProductId() == null) {
+                log.warn("Product not found for item in cart for userId={}, itemId={}", userId, item.getId());
                 errors.add("Product " + item.getProductName() + " is no longer available");
             }
 
             // Check if price changed (warning, not error)
             // In production, fetch from Product Service and compare
             if (item.getPrice() == null || item.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+                log.warn("Price information outdated for userId={}, itemId={}, productId={}", userId, item.getId(), item.getProductId());
                 warnings.add("Product " + item.getProductName() + " price information is outdated");
             }
 
@@ -375,6 +447,8 @@ public class CartServiceImpl implements CartService {
         }
 
         boolean isValid = errors.isEmpty();
+        log.info("Cart validation result for userId={}, cartId={}, isValid={}, errorCount={}, warningCount={}",
+            userId, cart.getId(), isValid, errors.size(), warnings.size());
 
         return CartValidationResponse.builder()
             .isValid(isValid)
@@ -387,7 +461,7 @@ public class CartServiceImpl implements CartService {
 
     /**
      * Gets checkout summary with pricing details.
-     * 
+     *
      * Checkout Logic:
      * 1. Get cart items
      * 2. Calculate subtotal
@@ -397,14 +471,20 @@ public class CartServiceImpl implements CartService {
      */
     @Override
     public CheckoutSummaryResponse getCheckoutSummary(UUID userId) {
+        log.debug("Getting checkout summary for userId={}", userId);
+
         // Get cart
         Cart cart = cartRepository.findByUserId(userId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_NOT_FOUND,
-                "Cart not found for user: " + userId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart not found for userId={}", userId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_NOT_FOUND,
+                    "Cart not found for user: " + userId
+                );
+            });
 
         if (cart.getItems() == null || cart.getItems().isEmpty()) {
+            log.error("Cart is empty for userId={}, cannot proceed with checkout", userId);
             throw new BadRequestException(
                 ErrorCode.CART_EMPTY,
                 "Cannot checkout with empty cart"
@@ -416,6 +496,9 @@ public class CartServiceImpl implements CartService {
         BigDecimal tax = subtotal.multiply(TAX_RATE).setScale(2, java.math.RoundingMode.HALF_UP);
         BigDecimal deliveryCharge = DELIVERY_CHARGE;
         BigDecimal finalAmount = subtotal.add(tax).add(deliveryCharge).setScale(2, java.math.RoundingMode.HALF_UP);
+
+        log.info("Checkout summary calculated for userId={}, cartId={}, itemCount={}, subtotal={}, tax={}, deliveryCharge={}, finalAmount={}",
+            userId, cart.getId(), cart.getItems().size(), subtotal, tax, deliveryCharge, finalAmount);
 
         return CheckoutSummaryResponse.builder()
             .items(cartMapper.toCartItemResponseList(cart.getItems()))
@@ -429,7 +512,7 @@ public class CartServiceImpl implements CartService {
 
     /**
      * Syncs cart with latest product information.
-     * 
+     *
      * Sync Logic:
      * 1. Get cart
      * 2. For each item, fetch latest product info
@@ -440,16 +523,24 @@ public class CartServiceImpl implements CartService {
     @Override
     @Transactional
     public CartResponse syncCart(UUID userId) {
+        log.debug("Syncing cart with product service for userId={}", userId);
+
         // Get cart
         Cart cart = cartRepository.findByUserId(userId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_NOT_FOUND,
-                "Cart not found for user: " + userId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart not found for userId={}", userId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_NOT_FOUND,
+                    "Cart not found for user: " + userId
+                );
+            });
 
         if (cart.getItems() == null || cart.getItems().isEmpty()) {
+            log.debug("Cart is empty for userId={}, sync skipped", userId);
             return cartMapper.toCartResponse(cart);
         }
+
+        int initialItemCount = cart.getItems().size();
 
         // Sync each item - iterate and remove in place to avoid orphanRemoval issues
         List<CartItem> itemsToRemove = new ArrayList<>();
@@ -457,19 +548,28 @@ public class CartServiceImpl implements CartService {
             try {
                 // In production, fetch from Product Service
                 // For now, keep the item as is
+                log.trace("Syncing item for userId={}, itemId={}, productId={}", userId, item.getId(), item.getProductId());
             } catch (Exception e) {
                 // Product no longer available, mark for removal
+                log.warn("Product no longer available for userId={}, itemId={}, productId={}: {}", userId, item.getId(), item.getProductId(), e.getMessage());
                 itemsToRemove.add(item);
             }
         }
 
         // Remove unavailable items from the cart collection (orphanRemoval will handle DB deletion)
-        cart.getItems().removeAll(itemsToRemove);
+        if (!itemsToRemove.isEmpty()) {
+            cart.getItems().removeAll(itemsToRemove);
+            log.info("Unavailable items removed for userId={}, cartId={}, removedCount={}", userId, cart.getId(), itemsToRemove.size());
+        }
+
         recalculateCartTotal(cart);
         cart = cartRepository.save(cart);
+        log.debug("Cart total recalculated for userId={}, cartId={}, newTotal={}", userId, cart.getId(), cart.getTotalAmount());
 
         // Save to Redis
         saveToRedis(cart);
+        log.info("Cart synced for userId={}, cartId={}, initialItemCount={}, finalItemCount={}",
+            userId, cart.getId(), initialItemCount, cart.getItems().size());
 
         return cartMapper.toCartResponse(cart);
     }
@@ -479,28 +579,38 @@ public class CartServiceImpl implements CartService {
      */
     @Override
     public CartItemResponse getCartItem(UUID userId, UUID itemId) {
+        log.debug("Getting cart item for userId={}, itemId={}", userId, itemId);
+
         // Get cart
         Cart cart = cartRepository.findByUserId(userId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_NOT_FOUND,
-                "Cart not found for user: " + userId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart not found for userId={}", userId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_NOT_FOUND,
+                    "Cart not found for user: " + userId
+                );
+            });
 
         // Find item
         CartItem cartItem = cartItemRepository.findById(itemId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                ErrorCode.CART_ITEM_NOT_FOUND,
-                "Cart item not found with id: " + itemId
-            ));
+            .orElseThrow(() -> {
+                log.error("Cart item not found for itemId={}", itemId);
+                return new ResourceNotFoundException(
+                    ErrorCode.CART_ITEM_NOT_FOUND,
+                    "Cart item not found with id: " + itemId
+                );
+            });
 
         // Verify item belongs to cart
         if (!cartItem.getCart().getId().equals(cart.getId())) {
+            log.warn("Cart item does not belong to this cart for userId={}, cartId={}, itemId={}", userId, cart.getId(), itemId);
             throw new BadRequestException(
                 ErrorCode.INVALID_PARAMETER,
                 "Cart item does not belong to this cart"
             );
         }
 
+        log.info("Cart item retrieved for userId={}, itemId={}, productId={}", userId, itemId, cartItem.getProductId());
         return cartMapper.toCartItemResponse(cartItem);
     }
 
@@ -508,6 +618,7 @@ public class CartServiceImpl implements CartService {
      * Helper method: Creates a new cart for a user.
      */
     private Cart createNewCart(UUID userId) {
+        log.debug("Creating new cart for userId={}", userId);
         Cart cart = Cart.builder()
             .userId(userId)
             .status(CartStatus.ACTIVE)
@@ -516,7 +627,9 @@ public class CartServiceImpl implements CartService {
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())
             .build();
-        return cartRepository.save(cart);
+        cart = cartRepository.save(cart);
+        log.info("New cart created for userId={}, cartId={}", userId, cart.getId());
+        return cart;
     }
 
     /**
@@ -531,12 +644,14 @@ public class CartServiceImpl implements CartService {
         }
         cart.setTotalAmount(total);
         cart.setUpdatedAt(LocalDateTime.now());
+        log.trace("Cart total recalculated: cartId={}, itemCount={}, newTotal={}", cart.getId(), cart.getItems() != null ? cart.getItems().size() : 0, total);
     }
 
     /**
      * Helper method: Saves cart to Redis for caching.
      */
     private void saveToRedis(Cart cart) {
+        log.trace("Saving cart to Redis for cartId={}, userId={}", cart.getId(), cart.getUserId());
         List<RedisCartItem> redisItems = new ArrayList<>();
         if (cart.getItems() != null) {
             for (CartItem item : cart.getItems()) {
@@ -564,12 +679,14 @@ public class CartServiceImpl implements CartService {
             .build();
 
         redisCartRepository.save(redisCart);
+        log.debug("Cart saved to Redis for cartId={}, userId={}, itemCount={}", cart.getId(), cart.getUserId(), redisItems.size());
     }
 
     /**
      * Helper method: Converts RedisCart to CartResponse.
      */
     private CartResponse convertRedisCartToResponse(RedisCart redisCart) {
+        log.trace("Converting RedisCart to CartResponse for cartId={}", redisCart.getCartId());
         List<CartItemResponse> itemResponses = new ArrayList<>();
         if (redisCart.getItems() != null) {
             for (RedisCartItem item : redisCart.getItems()) {

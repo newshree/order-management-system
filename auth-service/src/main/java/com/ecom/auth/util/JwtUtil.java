@@ -2,6 +2,7 @@ package com.ecom.auth.util;
 
 import java.security.Key;
 import java.util.Date;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -41,11 +42,22 @@ public class JwtUtil {
 	 * @param email the subject (user email) to embed in the token
 	 * @return a signed JWT token with the access token expiration time
 	 */
-	public String generateAccessToken(String email) {
+	public String generateAccessToken(String email, UUID userId, String role) {
 		return Jwts.builder()
+				// Standard claim
 				.setSubject(email)
+
+				// Custom claims
+				.claim("userId", userId.toString())
+				.claim("role", role)
+
+				// Token metadata
 				.setIssuedAt(new Date())
-				.setExpiration(new Date(System.currentTimeMillis() + expiration))
+				.setExpiration(
+						new Date(System.currentTimeMillis() + expiration)
+				)
+
+				// Signature
 				.signWith(getSigningKey(), SignatureAlgorithm.HS256)
 				.compact();
 	}
@@ -56,11 +68,22 @@ public class JwtUtil {
 	 * @param email the subject (user email) to embed in the token
 	 * @return a signed JWT token with the refresh token expiration time
 	 */
-	public String generateRefreshToken(String email) {
+	public String generateRefreshToken(String email, UUID userId, String role) {
 		return Jwts.builder()
+				// Standard claim
 				.setSubject(email)
+
+				// Custom claims
+				.claim("userId", userId.toString())
+				.claim("role", role)
+
+				// Time-based claims
 				.setIssuedAt(new Date())
-				.setExpiration(new Date(System.currentTimeMillis() + refreshExpiration))
+				.setExpiration(
+						new Date(System.currentTimeMillis() + refreshExpiration)
+				)
+
+				// Signing key
 				.signWith(getSigningKey(), SignatureAlgorithm.HS256)
 				.compact();
 	}

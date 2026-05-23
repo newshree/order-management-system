@@ -8,7 +8,7 @@ package com.ecom.auth.enums;
  */
 public enum ErrorCode {
 
-	    /** User account with the provided email already exists */
+	/** User account with the provided email already exists */
     USER_ALREADY_EXISTS("USER_ALREADY_EXISTS"),
 
     /** User account with the provided email was not found */

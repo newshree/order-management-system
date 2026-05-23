@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,20 +23,23 @@ import com.ecom.cart.dto.response.CartItemResponse;
 import com.ecom.cart.dto.response.CartResponse;
 import com.ecom.cart.dto.response.CartValidationResponse;
 import com.ecom.cart.dto.response.CheckoutSummaryResponse;
+import com.ecom.cart.exception.ResourceNotFoundException;
 import com.ecom.cart.service.CartService;
 
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * CartController - REST API endpoints for cart management.
- * 
+ *
  * Defines all HTTP endpoints for cart operations including:
  * - Cart retrieval and management
  * - Item management (add, update, remove)
  * - Cart validation and checkout summary
  * - Cart synchronization with product service
- *    
+ *
  */
+@Slf4j
 @CrossOrigin(origins = "http://localhost:3000")  // TODO: Change for production
 @RestController
 @RequestMapping("/api/cart")
@@ -44,20 +48,22 @@ public class CartController {
     @Autowired
     private CartService cartService;
 
-    private static final String MOCK_USER_ID = "550e8400-e29b-41d4-a716-446655440000";  // TODO: Remove mock user ID
-    
     /**
      * Gets the complete shopping cart for the authenticated user.
      * Creates a new cart if one doesn't exist.
-     * 
+     *
      * @param userId the UUID of the user (passed via header or context)
      * @return ResponseEntity with CartResponse containing cart details
      */
     @GetMapping("/getCart")
-    public ResponseEntity<ApiResponse<CartResponse>> getCart() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CartResponse>> getCart(
+        @RequestHeader("X-User-Id") UUID userId)
+    {
+        log.debug("Fetching cart for userId={}", userId);
         CartResponse response = cartService.getCart(userId);
+        log.info("Cart retrieved successfully for userId={}, cartId={}, itemCount={}",
+            userId, response.getCartId(),
+            response.getItems() != null ? response.getItems().size() : 0);
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
                 .data(response)
@@ -77,10 +83,13 @@ public class CartController {
      */
     @PostMapping("/addItem")
     public ResponseEntity<ApiResponse<CartResponse>> addItemToCart(
-            @Valid @RequestBody AddItemToCartRequest request) {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+            @Valid @RequestBody AddItemToCartRequest request,
+            @RequestHeader("X-User-Id") UUID userId) {
+        log.debug("Adding item to cart for userId={}, productId={}, quantity={}",
+            userId, request.getProductId(), request.getQuantity());
         CartResponse response = cartService.addItemToCart(userId, request);
+        log.info("Item added to cart for userId={}, cartId={}, productId={}, quantity={}",
+            userId, response.getCartId(), request.getProductId(), request.getQuantity());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<CartResponse>builder()
                 .success(true)
                 .data(response)
@@ -90,14 +99,14 @@ public class CartController {
 
     /**
      * PUT /api/cart/items/{itemId} - Update item quantity.
-     * 
+     *
      * Updates the quantity of a specific item in the cart.
-     * 
+     *
      * Request Body Example:
      * {
      *   "quantity": 5
      * }
-     * 
+     *
      * @param itemId the UUID of the cart item to update
      * @param request UpdateCartItemQuantityRequest containing new quantity (validated)
      * @param userId the UUID of the user
@@ -108,10 +117,13 @@ public class CartController {
     @PutMapping("/updateItemQuantity/{itemId}")
     public ResponseEntity<ApiResponse<CartResponse>> updateItemQuantity(
             @PathVariable UUID itemId,
-            @Valid @RequestBody UpdateCartItemQuantityRequest request) {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+            @Valid @RequestBody UpdateCartItemQuantityRequest request,
+            @RequestHeader("X-User-Id") UUID userId) {
+        log.debug("Updating item quantity for userId={}, itemId={}, newQuantity={}",
+            userId, itemId, request.getQuantity());
         CartResponse response = cartService.updateItemQuantity(userId, itemId, request);
+        log.info("Item quantity updated for userId={}, itemId={}, cartId={}, newQuantity={}",
+            userId, itemId, response.getCartId(), request.getQuantity());
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
                 .data(response)
@@ -121,9 +133,9 @@ public class CartController {
 
     /**
      * DELETE /api/cart/items/{itemId} - Remove item from cart.
-     * 
+     *
      * Removes a specific item from the user's cart.
-     * 
+     *
      * @param itemId the UUID of the cart item to remove
      * @param userId the UUID of the user
      * @return ResponseEntity with CartResponse containing updated cart
@@ -131,10 +143,12 @@ public class CartController {
      */
     @DeleteMapping("/removeItem/{itemId}")
     public ResponseEntity<ApiResponse<CartResponse>> removeItemFromCart(
-            @PathVariable UUID itemId) {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+            @PathVariable UUID itemId,
+            @RequestHeader("X-User-Id") UUID userId) {
+        log.debug("Removing item from cart for userId={}, itemId={}", userId, itemId);
         CartResponse response = cartService.removeItemFromCart(userId, itemId);
+        log.info("Item removed from cart for userId={}, itemId={}, cartId={}",
+            userId, itemId, response.getCartId());
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
                 .data(response)
@@ -144,18 +158,20 @@ public class CartController {
 
     /**
      * DELETE /api/cart - Clear cart.
-     * 
+     *
      * Removes all items from the user's cart.
-     * 
+     *
      * @param userId the UUID of the user
      * @return ResponseEntity with empty CartResponse
      * @throws ResourceNotFoundException if cart not found
      */
     @DeleteMapping("/clearCart")
-    public ResponseEntity<ApiResponse<CartResponse>> clearCart() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CartResponse>> clearCart(
+            @RequestHeader("X-User-Id") UUID userId) {
+        log.debug("Clearing cart for userId={}", userId);
         CartResponse response = cartService.clearCart(userId);
+        log.info("Cart cleared successfully for userId={}, cartId={}",
+            userId, response.getCartId());
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
                 .data(response)
@@ -165,10 +181,10 @@ public class CartController {
 
     /**
      * POST /api/cart/validate - Validate cart for checkout.
-     * 
+     *
      * Validates all cart items for checkout readiness.
      * Checks product availability, pricing, and inventory.
-     * 
+     *
      * Response Example:
      * {
      *   "isValid": true,
@@ -177,16 +193,18 @@ public class CartController {
      *   "validationErrors": [],
      *   "validationWarnings": ["Item X price has increased"]
      * }
-     * 
+     *
      * @param userId the UUID of the user
      * @return ResponseEntity with CartValidationResponse containing validation results
      * @throws ResourceNotFoundException if cart not found
      */
     @PostMapping("/validateCart")
-    public ResponseEntity<ApiResponse<CartValidationResponse>> validateCart() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CartValidationResponse>> validateCart(
+            @RequestHeader("X-User-Id") UUID userId) {
+        log.debug("Validating cart for userId={}", userId);
         CartValidationResponse response = cartService.validateCart(userId);
+        log.info("Cart validation completed for userId={}, isValid={}, errorCount={}, warningCount={}",
+            userId, response.getIsValid(), response.getErrorCount(), response.getWarningCount());
         return ResponseEntity.ok(ApiResponse.<CartValidationResponse>builder()
                 .success(true)
                 .data(response)
@@ -196,13 +214,13 @@ public class CartController {
 
     /**
      * GET /api/cart/checkout - Get checkout summary.
-     * 
+     *
      * Provides complete pricing breakdown for checkout:
      * - Subtotal (sum of all items)
      * - Tax (calculated as 10% of subtotal)
      * - Delivery charge (fixed amount)
      * - Final total
-     * 
+     *
      * Response Example:
      * {
      *   "items": [...],
@@ -212,17 +230,19 @@ public class CartController {
      *   "totalAmount": 2249.97,
      *   "finalAmount": 2249.97
      * }
-     * 
+     *
      * @param userId the UUID of the user
      * @return ResponseEntity with CheckoutSummaryResponse containing pricing details
      * @throws ResourceNotFoundException if cart not found or empty
      * @throws BadRequestException if cart is empty
      */
     @GetMapping("/getCheckoutSummary")
-    public ResponseEntity<ApiResponse<CheckoutSummaryResponse>> getCheckoutSummary() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CheckoutSummaryResponse>> getCheckoutSummary(
+            @RequestHeader("X-User-Id") UUID userId) {
+        log.debug("Getting checkout summary for userId={}", userId);
         CheckoutSummaryResponse response = cartService.getCheckoutSummary(userId);
+        log.info("Checkout summary retrieved for userId={}, itemCount={}, finalAmount={}",
+            userId, response.getItems().size(), response.getFinalAmount());
         return ResponseEntity.ok(ApiResponse.<CheckoutSummaryResponse>builder()
                 .success(true)
                 .data(response)
@@ -232,21 +252,24 @@ public class CartController {
 
     /**
      * POST /api/cart/sync - Sync cart with product service.
-     * 
+     *
      * Synchronizes cart with latest product information:
      * - Updates prices from Product Service
      * - Removes unavailable items
      * - Recalculates totals
-     * 
+     *
      * @param userId the UUID of the user
      * @return ResponseEntity with CartResponse containing synced cart
      * @throws ResourceNotFoundException if cart not found
      */
     @PostMapping("/syncCart")
-    public ResponseEntity<ApiResponse<CartResponse>> syncCart() {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+    public ResponseEntity<ApiResponse<CartResponse>> syncCart(
+            @RequestHeader("X-User-Id") UUID userId) {
+        log.debug("Syncing cart with product service for userId={}", userId);
         CartResponse response = cartService.syncCart(userId);
+        log.info("Cart synced successfully for userId={}, cartId={}, itemCount={}",
+            userId, response.getCartId(),
+            response.getItems() != null ? response.getItems().size() : 0);
         return ResponseEntity.ok(ApiResponse.<CartResponse>builder()
                 .success(true)
                 .data(response)
@@ -255,9 +278,9 @@ public class CartController {
     }
 
     /**
-     * 
+     *
      * Retrieves details of a specific item in the cart.
-     * 
+     *
      * @param itemId the UUID of the cart item
      * @param userId the UUID of the user
      * @return ResponseEntity with CartItemResponse containing item details
@@ -265,10 +288,12 @@ public class CartController {
      */
     @GetMapping("/getCartItems/{itemId}")
     public ResponseEntity<ApiResponse<CartItemResponse>> getCartItem(
-            @PathVariable UUID itemId) {
-        // TODO: Get userId from security context or request header
-        UUID userId = UUID.fromString(MOCK_USER_ID);  // Mock user
+            @PathVariable UUID itemId,
+            @RequestHeader("X-User-Id") UUID userId) {
+        log.debug("Retrieving cart item for userId={}, itemId={}", userId, itemId);
         CartItemResponse response = cartService.getCartItem(userId, itemId);
+        log.info("Cart item retrieved for userId={}, itemId={}, productId={}",
+            userId, itemId, response.getProductId());
         return ResponseEntity.ok(ApiResponse.<CartItemResponse>builder()
                 .success(true)
                 .data(response)

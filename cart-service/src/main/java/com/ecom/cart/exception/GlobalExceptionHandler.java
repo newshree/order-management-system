@@ -3,8 +3,6 @@ package com.ecom.cart.exception;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -15,6 +13,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import com.ecom.cart.enums.ErrorCode;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Global exception handler for the Cart Service.
@@ -31,13 +30,9 @@ import jakarta.servlet.http.HttpServletRequest;
  * will be intercepted here and converted into a
  * standardized API error response.
  */
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-
-        /**
-         * Logger for exception handling.
-         */
-        private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
      * Handles ResourceNotFoundException.
@@ -55,8 +50,9 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
 
         log.warn(
-                "Resource not found. Path: {}, Message: {}",
+                "Resource not found. path={}, method={}, message={}",
                 request.getRequestURI(),
+                request.getMethod(),
                 ex.getMessage()
         );
 
@@ -89,19 +85,21 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
 
         HttpStatus status = HttpStatus.BAD_REQUEST;
-        
+
         // Check if this is an authorization-related error
         if (ex.getErrorCode() == ErrorCode.UNAUTHORIZED || ex.getErrorCode() == ErrorCode.FORBIDDEN) {
             status = ex.getErrorCode() == ErrorCode.UNAUTHORIZED ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
         }
 
         log.warn(
-                "Client error occurred. Path: {}, Status: {}, Message: {}",
+                "Client error occurred. path={}, method={}, status={}, errorCode={}, message={}",
                 request.getRequestURI(),
+                request.getMethod(),
                 status.value(),
+                ex.getErrorCode(),
                 ex.getMessage()
         );
-        
+
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(status.value())
@@ -136,15 +134,15 @@ public class GlobalExceptionHandler {
             MethodArgumentNotValidException ex,
             HttpServletRequest request) {
 
-        
         String errors = ex.getBindingResult().getFieldErrors()
                 .stream()
                 .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
                 .collect(Collectors.joining(", "));
 
         log.warn(
-                "Validation failed. Path: {}, Errors: {}",
+                "Validation failed. path={}, method={}, validationErrors={}",
                 request.getRequestURI(),
+                request.getMethod(),
                 errors
         );
 
@@ -172,9 +170,11 @@ public class GlobalExceptionHandler {
             Exception ex,
             HttpServletRequest request) {
 
-        // FULL INTERNAL LOGGING
-        log.error("Unhandled exception occurred for path: {}",
+        log.error("Unhandled exception occurred. path={}, method={}, exceptionType={}, message={}",
                 request.getRequestURI(),
+                request.getMethod(),
+                ex.getClass().getSimpleName(),
+                ex.getMessage(),
                 ex);
 
         ErrorResponse error = ErrorResponse.builder()
@@ -206,8 +206,10 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
 
         log.warn(
-                "Type mismatch. Path: {}, Message: {}",
+                "Type mismatch in request parameter. path={}, method={}, paramName={}, message={}",
                 request.getRequestURI(),
+                request.getMethod(),
+                ex.getName(),
                 ex.getMessage()
         );
 
@@ -237,12 +239,14 @@ public class GlobalExceptionHandler {
             Exception ex,
             HttpServletRequest request) {
 
-        log.warn(
-                "Database access error. Path: {}, Message: {}",
+        log.error(
+                "Database access error. path={}, method={}, message={}",
                 request.getRequestURI(),
-                ex.getMessage()
+                request.getMethod(),
+                ex.getMessage(),
+                ex
         );
-        
+
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
