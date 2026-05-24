@@ -59,7 +59,8 @@ public class GatewayConfig {
 									.filter(errorHandlingFilter.apply(
 											new ErrorHandlingFilter.Config()))
 							)
-							.uri("http://localhost:8002"))
+							// .uri("http://localhost:8002")) // Use this for local development
+							.uri("http://cart-service:8002")) // Use service name for Docker networking
 				.route("product-service",
 					r -> r.path("/api/products/**")
 							.filters(f -> f
@@ -112,7 +113,8 @@ public class GatewayConfig {
 									.filter(errorHandlingFilter.apply(
 											new ErrorHandlingFilter.Config()))
 							)
-							.uri("http://localhost:8007"))
+							// .uri("http://localhost:8007")) // Use this for local development
+							.uri("http://auth-service:8007")) // Use service name for Docker networking
 				.build();
 	}
 }

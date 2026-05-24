@@ -276,3 +276,13 @@ For issues or questions, refer to the Cart Service documentation for similar imp
 **Version**: 1.0.0  
 **Last Updated**: May 2025  
 **Maintained By**: Development Team
+
+## Commands To Run
+
+mvn clean package
+
+Then: 
+docker compose down -v
+
+Then:
+docker compose up --build
