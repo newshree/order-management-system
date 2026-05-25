@@ -1,0 +1,2 @@
+CREATE DATABASE cartdb;
+CREATE DATABASE authdb;
