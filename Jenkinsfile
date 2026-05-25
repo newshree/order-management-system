@@ -4,7 +4,6 @@ pipeline {
 
     tools {
         maven 'Maven'
-        jdk 'Java17'
     }
 
     stages {
@@ -50,6 +49,17 @@ pipeline {
                 dir('cart-service') {
                     bat 'mvn test'
                 }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+
+                bat 'docker build -t api-gateway ./api-gateway'
+
+                bat 'docker build -t auth-service ./auth-service'
+
+                bat 'docker build -t cart-service ./cart-service'
             }
         }
     }
