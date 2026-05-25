@@ -4,10 +4,8 @@ pipeline {
 
     stages {
 
-        stage('Checkout Code') {
-            steps {
-                checkout scm
-            }
+        tools {
+            maven 'Maven'
         }
 
         stage('Verify Java Version') {
