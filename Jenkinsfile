@@ -2,11 +2,11 @@ pipeline {
 
     agent any
 
-    tools {
-        maven 'Maven'
-    }
-
     stages {
+
+        tools {
+            maven 'Maven'
+        }
 
         stage('Verify Java Version') {
             steps {
